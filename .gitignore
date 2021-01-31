@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data files
+*.npy
+*.npz
+*.pickle
+
+# Output files
+out_*
+
+# VSCode settings
+.vscode/
