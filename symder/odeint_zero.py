@@ -14,9 +14,18 @@ def odeint_zero(func, y0, t, *args):
 def odeint_zero_jvp(func, primals, tangents):
     y0, t, *args = primals
     dy0, dt, *dargs = tangents
+
+    # Wrap y0 using `odeint_zero` to obtain y
     y = odeint_zero(func, y0, t, *args)
+
+    # Define time derivative dy/dt = func(y, t)
     dydt = func(y, t, *args)
-    return y, dy0 + jax.tree_map(lambda x: x * jnp.broadcast_to(dt, x.shape), dydt)
+
+    # Compute JVP: dy = dy/dy0 * dy0 + dy/dt * dt, where dy/dy0 = 1
+    dy = jax.tree_multimap(
+        lambda dy0_, dydt_: dy0_ + dydt_ * jnp.broadcast_to(dt, dydt_.shape), dy0, dydt
+    )
+    return y, dy
 
 
 def dfunc(func, order, transform=None):

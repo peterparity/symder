@@ -6,10 +6,13 @@ __pycache__/
 # Data files
 *.npy
 *.npz
-*.pickle
+*.pt
 
 # Output files
 out_*
+
+# Notebook checkpoints
+*.ipynb_checkpoints/
 
 # VSCode settings
 .vscode/

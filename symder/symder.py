@@ -45,7 +45,7 @@ def get_model_apply(
     else:
 
         def model_apply(params, x):
-            z = encoder_apply(params[encoder_name], x)
+            z, *_ = encoder_apply(params[encoder_name], x)
             sym_deriv_x = symder_apply(params[sym_model_name], z)
             z_hidden = hidden_transform(z) if hidden_transform is not None else z
             return sym_deriv_x, z_hidden

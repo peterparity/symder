@@ -13,7 +13,7 @@ from functools import partial
 # from tqdm.auto import tqdm
 
 from data.utils import get_dataset
-from data.reac_diff_2d import generate_dataset
+from data.diff_source_2d import generate_dataset
 
 from encoder.utils import append_dzdt, concat_visible
 from symder.sym_models import SymModel, Quadratic, SpatialDerivative2D, rescale_z
@@ -41,6 +41,16 @@ def get_model(num_visible, num_hidden, num_der, mesh, dx, dt, scale, get_dzdt=Fa
                 hk.Conv3D(num_hidden, kernel_shape=1),
             ]
         )(x)
+
+    # def encoder(x):
+    #     return hk.Sequential(
+    #         [
+    #             lambda x: jnp.pad(
+    #                 x, ((0, 0), (0, 0), (pad, pad), (pad, pad), (0, 0)), "wrap"
+    #             ),
+    #             hk.Conv3D(num_hidden, kernel_shape=5, padding="VALID"),
+    #         ]
+    #     )(x)
 
     encoder = hk.without_apply_rng(hk.transform(encoder))
     encoder_apply = append_dzdt(encoder.apply) if get_dzdt else encoder.apply
@@ -200,6 +210,20 @@ def train(
             grads, opt_state, params, sparse_mask
         )
 
+        # # TEMPORARY: Fix params
+        # flat_params, tree = jax.tree_flatten(params["sym_model"])
+        # flat_params[0] = jax.device_put_sharded(
+        #     4 * [jnp.array([0.0, 0.0])], jax.devices()
+        # )
+        # flat_params[1] = jax.device_put_sharded(
+        #     4 * [jnp.array([[0.0, 0.0], [0.1, -0.01]])], jax.devices()
+        # )
+        # flat_params[2] = jax.device_put_sharded(
+        #     4 * [jnp.array([[0.0, 0.0, 0.2, 0.2, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0]])],
+        #     jax.devices(),
+        # )
+        # params["sym_model"] = jax.tree_unflatten(tree, flat_params)
+
         # Print loss
         if step % 100 == 0:
             loss, mse, reg_dzdt, reg_l1_sparse = loss_list
@@ -231,23 +255,23 @@ def train(
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Run SymDer model on 2D reaction-diffusion data."
+        description="Run SymDer model on 2D diffusion with source data."
     )
     parser.add_argument(
         "-o",
         "--output",
         type=str,
-        default="./reac_diff_2d_run1/",
-        help="Output folder path. Default: ./reac_diff_2d_run0/",
+        default="./diff_source_2d_run0/",
+        help="Output folder path. Default: ./diff_source_2d_run0/",
     )
     parser.add_argument(
         "-d",
         "--dataset",
         type=str,
-        default="./data/reac_diff_2d.npz",
+        default="./data/diff_source_2d.npz",
         help=(
-            "Path to 2D reaction-diffusion dataset (generated and saved if it does not "
-            "exist). Default: ./data/reac_diff_2d.npz"
+            "Path to 2D diffusion with source dataset (generated and saved if it does not "
+            "exist). Default: ./data/diff_source_2d.npz"
         ),
     )
     args = parser.parse_args()
@@ -277,21 +301,21 @@ if __name__ == "__main__":
     )
 
     # Set training hyperparameters
-    n_steps = 100000
-    sparse_thres = 2e-3
+    n_steps = 50000
+    sparse_thres = 5e-3
     sparse_interval = 1000
     multi_gpu = True
 
     # Define optimizers
     optimizers = {
-        "encoder": optax.adabelief(1e-3, eps=1e-16),
-        "sym_model": optax.adabelief(1e-3, eps=1e-16),
+        "encoder": optax.adabelief(1e-4, eps=1e-16),
+        "sym_model": optax.adabelief(1e-4, eps=1e-16),
     }
 
     # Set loss function hyperparameters
     loss_fn_args = {
         "scale": jnp.array(scale),
-        "deriv_weight": jnp.array([1.0, 1.0]),
+        "deriv_weight": jnp.array([1.0, 10.0]),
         "reg_dzdt": 0,
         "reg_l1_sparse": 0,
     }

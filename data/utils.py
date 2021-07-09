@@ -63,23 +63,27 @@ def generate_diff_kernels(order):
     even_kernels = np.stack(even_kernels)
     odd_kernels = lax.conv(
         even_kernels[:, None, :], rev_d1[None, None, :], (1,), "SAME"
-    ).squeeze()
+    ).squeeze(1)
 
     kernels = np.stack((even_kernels, odd_kernels), axis=1).reshape(-1, 2 * p + 1)
-    if np.fmod(order, 2) == 0:
+    if order % 2 == 0:
         kernels = kernels[:-1]
 
     return kernels
 
 
-def get_dataset(filename, generate_dataset, **gen_kwargs):
+def get_dataset(filename, generate_dataset, get_raw_sol=False, **gen_kwargs):
     if os.path.isfile(filename):
-        scaled_data, scale, loaded_gen_kwargs, _ = load_dataset(filename)
+        scaled_data, scale, loaded_gen_kwargs, raw_sol = load_dataset(
+            filename, get_raw_sol
+        )
         assert gen_kwargs == loaded_gen_kwargs
     else:
-        scaled_data, scale, raw_sol = generate_dataset(**gen_kwargs)
+        scaled_data, scale, raw_sol = generate_dataset(
+            raw_sol=get_raw_sol, **gen_kwargs
+        )
         save_dataset(filename, scaled_data, scale, gen_kwargs, raw_sol)
-    return scaled_data, scale
+    return (scaled_data, scale, raw_sol) if get_raw_sol else (scaled_data, scale)
 
 
 def save_dataset(filename, scaled_data, scale, gen_kwargs, raw_sol=None):
@@ -96,12 +100,12 @@ def save_dataset(filename, scaled_data, scale, gen_kwargs, raw_sol=None):
         raise FileExistsError(f"{filename} already exists! Dataset is not saved.")
 
 
-def load_dataset(filename, load_raw_sol=False):
+def load_dataset(filename, get_raw_sol=False):
     print(f"Loading dataset from file: {filename}")
     dataset = np.load(filename, allow_pickle=True)
     return (
         dataset["scaled_data"],
         dataset["scale"],
         dataset["gen_kwargs"],
-        dataset["raw_sol"] if load_raw_sol else None,
+        dataset["raw_sol"] if get_raw_sol else None,
     )

@@ -14,7 +14,7 @@ from functools import partial
 from data.utils import get_dataset
 from data.lorenz import generate_dataset
 
-from symder.encoder_utils import append_dzdt, concat_visible
+from encoder.utils import append_dzdt, concat_visible
 from symder.sym_models import SymModel, Quadratic, rescale_z
 from symder.symder import get_symder_apply, get_model_apply
 
@@ -51,7 +51,7 @@ def get_model(num_visible, num_hidden, num_der, dt, scale, get_dzdt=False):
     @partial(rescale_z, scale_vec=scale_vec)
     def sym_model(z, t):
         return SymModel(
-            dt,
+            1e2 * dt,
             (
                 hk.Linear(n_dims, w_init=jnp.zeros, b_init=jnp.zeros),
                 Quadratic(n_dims, init=jnp.zeros),
@@ -100,10 +100,9 @@ def train(
 
     # Initialize sparse mask
     sparsify = sparse_thres is not None and sparse_interval is not None
-    if sparsify:
-        sparse_mask = jax.tree_map(
-            lambda x: jnp.ones_like(x, dtype=bool), params["sym_model"]
-        )
+    sparse_mask = jax.tree_map(
+        lambda x: jnp.ones_like(x, dtype=bool), params["sym_model"]
+    )
 
     # Initialize optimizers
     update_params, opt_state = init_optimizers(params, optimizers, sparsify)
@@ -140,7 +139,7 @@ def train(
             best_params = jax.tree_map(lambda x: x.copy(), params)
 
         # Update sparse_mask based on a threshold
-        if step > 0 and step % sparse_interval == 0:
+        if sparsify and step > 0 and step % sparse_interval == 0:
             sparse_mask = jax.tree_map(
                 lambda x: jnp.abs(x) > sparse_thres, best_params["sym_model"]
             )
@@ -151,7 +150,7 @@ def train(
         )
 
         # Print loss
-        if step % 100 == 0:
+        if step % 1000 == 0:
             loss, mse, reg_dzdt, reg_l1_sparse = loss_list
             print(
                 f"Loss[{step}] = {loss}, MSE = {mse}, "
@@ -198,13 +197,21 @@ if __name__ == "__main__":
 
     # Set dataset parameters and load/generate dataset
     dt = 1e-2
-    tmax = 100 + 4 * dt
-    scaled_data, scale = get_dataset(args.dataset, generate_dataset, dt=dt, tmax=tmax)
+    tmax = 100 + 2 * dt
+    scaled_data, scale, raw_sol = get_dataset(
+        args.dataset,
+        generate_dataset,
+        get_raw_sol=True,
+        dt=dt,
+        tmax=tmax,
+        num_visible=num_visible,
+        num_der=num_der,
+    )
 
     # Set training hyperparameters
     n_steps = 50000
-    sparse_thres = 2e-3
-    sparse_interval = 1000
+    sparse_thres = 1e-3
+    sparse_interval = 5000
 
     # Define optimizers
     optimizers = {
@@ -229,13 +236,13 @@ if __name__ == "__main__":
 
     # Define model
     model_apply, model_init, model_args = get_model(
-        num_visible, num_hidden, num_der, 1e2 * dt, scale, get_dzdt=get_dzdt
+        num_visible, num_hidden, num_der, dt, scale, get_dzdt=get_dzdt
     )
 
     # Initialize parameters
     params = {}
     params["encoder"] = model_init["encoder"](
-        next(key_seq), jnp.ones([1, scaled_data.shape[1], num_visible])
+        next(key_seq), jnp.ones([1, scaled_data.shape[0], num_visible])
     )
     params["sym_model"] = model_init["sym_model"](
         next(key_seq), jnp.ones([1, 1, num_visible + num_hidden]), 0.0
@@ -257,5 +264,7 @@ if __name__ == "__main__":
 
     # Save model parameters and sparse mask
     print(f"Saving best model parameters in output folder: {args.output}")
-    save_pytree(os.path.join(args.output, "best_params.pt"), best_params)
-    save_pytree(os.path.join(args.output, "sparse_mask.pt"), sparse_mask)
+    save_pytree(
+        os.path.join(args.output, "best.pt"),
+        {"params": best_params, "sparse_mask": sparse_mask},
+    )

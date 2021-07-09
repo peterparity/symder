@@ -1,2 +1,2 @@
-__all__ = ["encoder_utils", "odeint_zero", "symder", "sym_models"]
+__all__ = ["odeint_zero", "symder", "sym_models"]
 from . import *

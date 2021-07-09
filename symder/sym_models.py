@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from jax import lax
 import numpy as np
 
 import haiku as hk
@@ -7,6 +8,7 @@ __all__ = [
     "Quadratic",
     "PointwisePolynomial",
     "SpatialDerivative1D",
+    "SpatialDerivative1D_FiniteDiff",
     "SpatialDerivative2D",
     "SymModel",
     "rescale_z",
@@ -76,6 +78,63 @@ class SpatialDerivative1D(hk.Module):
         L = jnp.sum(w * self.ik_vec, axis=-1)
         du = jnp.fft.ifft(L * v, axis=-2)
         return jnp.real(du) if jnp.isrealobj(u) else du
+
+
+class SpatialDerivative1D_FiniteDiff(hk.Module):
+    def __init__(
+        self,
+        mesh,
+        dx,
+        deriv_orders=(1, 2),
+        init=jnp.zeros,
+        name="spatial_derivative_1d_finite_diff",
+    ):
+        super().__init__(name=name)
+        self.init = init
+        self.kernels = jnp.take(
+            self.generate_diff_kernels(max(deriv_orders)), deriv_orders, axis=0
+        )
+
+    def generate_diff_kernels(self, order):
+        self.pad = int(np.floor((order + 1) / 2))
+
+        rev_d1 = np.array((0.5, 0.0, -0.5))
+        d2 = np.array((1.0, -2.0, 1.0))
+
+        even_kernels = [np.pad(np.array((1.0,)), (self.pad,))]
+        for i in range(order // 2):
+            even_kernels.append(np.convolve(even_kernels[-1], d2, mode="same"))
+
+        even_kernels = np.stack(even_kernels)
+        odd_kernels = lax.conv(
+            even_kernels[:, None, :], rev_d1[None, None, :], (1,), "SAME"
+        ).squeeze(1)
+
+        kernels = jnp.stack((even_kernels, odd_kernels), axis=1).reshape(
+            -1, 2 * self.pad + 1
+        )
+        if order % 2 == 0:
+            kernels = kernels[:-1]
+
+        return kernels
+
+    def __call__(self, u, t=None):
+        u_shape = u.shape
+        n_terms = self.kernels.shape[0]
+        u = (
+            u.reshape(-1, u_shape[-2], u_shape[-1])
+            .transpose((0, 2, 1))
+            .reshape(-1, 1, u_shape[-2])
+        )
+        u = jnp.pad(u, ((0, 0), (0, 0), (self.pad, self.pad)), "wrap")
+        w = hk.get_parameter("w", (u_shape[-1], n_terms), init=self.init)
+        terms = lax.conv(u, self.kernels[:, None, :].astype(u.dtype), (1,), "VALID")
+        du = jnp.sum(
+            jnp.expand_dims(w, -1)
+            * terms.reshape(-1, u_shape[-1], n_terms, u_shape[-2]),
+            axis=-2,
+        )
+        return du.transpose((0, 2, 1)).reshape(u_shape)
 
 
 class SpatialDerivative2D(hk.Module):

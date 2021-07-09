@@ -19,7 +19,7 @@ def generate_dataset(
     raw_sol=False,
 ):
     if tspan is None:
-        tspan = (0, 50 + 4 * dt)
+        tspan = (0, 50 + 2 * dt)
 
     kx = np.expand_dims(2 * np.pi * fftfreq(mesh, d=sys_size / mesh), axis=-1)
     ky = np.expand_dims(2 * np.pi * fftfreq(mesh, d=sys_size / mesh), axis=0)

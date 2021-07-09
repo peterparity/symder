@@ -12,27 +12,27 @@ def generate_dataset(dt=1e-2, tmax=None, num_visible=2, num_der=2, raw_sol=False
     if tmax is None:
         tmax = 100 + 2 * dt
 
-    def lorenz(t, y0, sigma, beta, rho):
-        """Lorenz equations"""
+    def rossler(t, y0, a, b, c):
+        """Rossler equations"""
         u, v, w = y0[..., 0], y0[..., 1], y0[..., 2]
-        up = -sigma * (u - v)
-        vp = rho * u - v - u * w
-        wp = -beta * w + u * v
+        up = -v - w
+        vp = u + a * v
+        wp = b + w * (u - c)
         return np.stack((up, vp, wp), axis=-1)
 
-    # Lorenz parameters and initial conditions
-    sigma, beta, rho = 10, 8 / 3.0, 28
+    # Rossler parameters and initial conditions
+    a, b, c = 0.2, 0.2, 5.7
     u0, v0, w0 = 0, 1, 1.05
 
-    # Integrate the Lorenz equations on the time grid t
-    print("Generating Lorenz system dataset...")
+    # Integrate the Rossler equations on the time grid t
+    print("Generating Rossler system dataset...")
     t_eval = np.arange(0, tmax, dt)
     sol = solve_ivp(
-        lorenz,
+        rossler,
         (0, tmax),
         y0=np.stack((u0, v0, w0), axis=-1),
         t_eval=t_eval,
-        args=(sigma, beta, rho),
+        args=(a, b, c),
     )
     data = sol.y[range(num_visible)]
 

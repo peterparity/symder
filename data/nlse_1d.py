@@ -12,17 +12,17 @@ __all__ = ["generate_dataset"]
 def generate_dataset(
     sys_size=2 * np.pi,
     mesh=64,
-    dt=1e-2,  # 100 * 1e-4
+    dt=1e-3,  # 10 * 1e-4
     tspan=None,
     pool=16,
-    tpool=100,
+    tpool=10,
     num_der=2,
     seed=0,
     squared=False,
     raw_sol=False,
 ):
     if tspan is None:
-        tspan = (0, 10 + 4 * dt)
+        tspan = (0, 0.5 + 4 * dt)
 
     out_mesh, mesh = mesh, pool * mesh
     dt /= tpool
@@ -31,7 +31,7 @@ def generate_dataset(
 
     # Initial condition
     np.random.seed(seed)
-    krange = 3.0
+    krange = 1.0
     envelope = np.exp(-1 / (2 * krange ** 2) * k ** 2)
     np.random.seed(0)
     v0 = envelope * (
@@ -72,10 +72,7 @@ def generate_dataset(
     reshaped_data = data.reshape(-1, data.shape[2] * data.shape[3])
     scaler = StandardScaler(with_mean=False)
     scaler.fit(reshaped_data)
-    if squared:
-        scaler.scale_ /= 0.05 * scaler.scale_[0]
-    else:
-        scaler.scale_ /= np.sqrt(0.05) * scaler.scale_[0]
+    scaler.scale_ /= scaler.scale_[0]
     scaled_data = scaler.transform(reshaped_data)
     # time, out_mesh, num_visible, num_der+1
     scaled_data = scaled_data.reshape(-1, out_mesh, 1, num_der + 1)

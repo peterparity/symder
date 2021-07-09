@@ -23,7 +23,7 @@ def save_pytree(path: Union[str, Path], data: pytree, overwrite: bool = False):
         if overwrite:
             path.unlink()
         else:
-            raise RuntimeError(f"File {path} already exists.")
+            raise FileExistsError(f"File {path} already exists.")
     with open(path, "wb") as file:
         pickle.dump(data, file)
 
@@ -47,6 +47,7 @@ def loss_fn(
     scale=None,
     deriv_weight=None,
     reg_dzdt=None,
+    reg_dzdt_var_norm=True,
     reg_l1_sparse=None,
     sym_model_name="sym_model",
 ):
@@ -79,10 +80,80 @@ def loss_fn(
     # dz/dt regularization loss
     if reg_dzdt is not None:
         num_hidden = dzdt_hidden.shape[-1]
-        reg_dzdt_loss = reg_dzdt * jnp.mean(
-            (dzdt_hidden - sym_dzdt_hidden) ** 2
-            / jnp.var(z_hidden.reshape(-1, num_hidden), axis=0)
+        if reg_dzdt_var_norm:
+            reg_dzdt_loss = reg_dzdt * jnp.mean(
+                (dzdt_hidden - sym_dzdt_hidden) ** 2
+                / jnp.var(z_hidden.reshape(-1, num_hidden), axis=0)
+            )
+        else:
+            reg_dzdt_loss = reg_dzdt * jnp.mean((dzdt_hidden - sym_dzdt_hidden) ** 2)
+        loss_list.append(reg_dzdt_loss)
+
+    # L1 sparse regularization loss
+    if reg_l1_sparse is not None:
+        reg_l1_sparse_loss = reg_l1_sparse * jax.tree_util.tree_reduce(
+            lambda x, y: x + jnp.abs(y).sum(), params[sym_model_name], 0.0
         )
+        loss_list.append(reg_l1_sparse_loss)
+
+    loss = sum(loss_list)
+    loss_list.insert(0, loss)
+    return loss, loss_list
+
+
+def loss_fn_weighted(
+    model_apply,
+    params,
+    batch,
+    target,
+    weight,
+    scale=None,
+    deriv_weight=None,
+    reg_dzdt=None,
+    reg_dzdt_var_norm=True,
+    reg_l1_sparse=None,
+    sym_model_name="sym_model",
+):
+    num_der = target.shape[-1]
+
+    if scale is None:
+        scale = jnp.ones(1, num_der + 1)
+    if deriv_weight is None:
+        deriv_weight = jnp.ones(num_der)
+
+    if reg_dzdt is not None:
+        x = batch[..., 0]
+        dxdt = batch[..., 1] * scale[:, 1] / scale[:, 0]
+        sym_deriv_x, z_hidden, dzdt_hidden, sym_dzdt_hidden = model_apply(
+            params, x, dxdt
+        )
+    else:
+        sym_deriv_x, z_hidden = model_apply(params, batch)
+
+    # scale to normed derivatives
+    scaled_sym_deriv_x = sym_deriv_x * scale[:, [0]] / scale[:, 1:]
+
+    # MSE loss
+    mse_loss = jnp.sum(
+        deriv_weight
+        * jnp.mean(
+            (weight * (target - scaled_sym_deriv_x) ** 2).reshape(-1, num_der), axis=0
+        )
+    )
+    loss_list = [mse_loss]
+
+    # dz/dt regularization loss
+    if reg_dzdt is not None:
+        num_hidden = dzdt_hidden.shape[-1]
+        if reg_dzdt_var_norm:
+            reg_dzdt_loss = reg_dzdt * jnp.mean(
+                (dzdt_hidden - sym_dzdt_hidden) ** 2
+                / jnp.var(z_hidden.reshape(-1, num_hidden), axis=0)
+            )
+        else:
+            reg_dzdt_loss = reg_dzdt * jnp.mean(
+                weight[..., 0] * (dzdt_hidden - sym_dzdt_hidden) ** 2
+            )
         loss_list.append(reg_dzdt_loss)
 
     # L1 sparse regularization loss
