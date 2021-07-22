@@ -25,7 +25,7 @@ from utils import loss_fn, init_optimizers, save_pytree  # , load_pytree
 def get_model(num_visible, num_hidden, num_der, mesh, dx, dt, scale, get_dzdt=False):
 
     # Define encoder
-    hidden_size = 64  # 128
+    hidden_size = 64
     pad = 2
 
     def encoder(x):
@@ -246,8 +246,8 @@ if __name__ == "__main__":
         type=str,
         default="./data/reac_diff_2d.npz",
         help=(
-            "Path to 2D reaction-diffusion dataset (generated and saved if it does not "
-            "exist). Default: ./data/reac_diff_2d.npz"
+            "Path to 2D reaction-diffusion dataset (generated and saved "
+            "if it does not exist). Default: ./data/reac_diff_2d.npz"
         ),
     )
     args = parser.parse_args()

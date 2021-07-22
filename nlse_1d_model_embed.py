@@ -21,7 +21,6 @@ from symder.sym_models import (
     SymModel,
     PointwisePolynomial,
     SpatialDerivative1D,
-    SpatialDerivative1D_FiniteDiff,
     rescale_z,
 )
 from symder.symder import get_symder_apply, get_model_apply
@@ -40,13 +39,6 @@ def get_model(
             (mesh, num_hidden),
             init=lambda *x: jnp.ones(*x) + 0.1 * hk.initializers.RandomNormal()(*x),
         )(x, *args)
-
-    # # Angle encoder
-    # def encoder(x, *args):
-    #     theta = DirectEmbedding(
-    #         (mesh, 1), init=jnp.zeros,  # hk.initializers.RandomNormal(),
-    #     )(x, *args)
-    #     return jnp.concatenate((jnp.cos(theta), jnp.sin(theta)), axis=-1)
 
     encoder = hk.without_apply_rng(hk.transform(encoder))
     encoder_apply = normalize_by_magnitude(encoder.apply, pad=pad, squared=squared)
@@ -173,17 +165,6 @@ def train(
         # batch, time, mesh, num_visible, num_der
         target = scaled_data[None, :, :, :, 1:]
 
-        # scaled_data = scaled_data[:100].reshape(100 // 100, 100, *scaled_data.shape[1:])
-        # if loss_fn_args["reg_dzdt"] is not None:
-        #     # batch, time, mesh, num_visible, 2
-        #     batch = scaled_data[:, :, :, :, :2]
-        # else:
-        #     # batch, time, mesh, num_visible
-        #     batch = scaled_data[:, :, :, :, 0]
-
-        # # batch, time, mesh, num_visible, num_der
-        # target = scaled_data[:, :, :, :, 1:]
-
         batch = jnp.asarray(batch)
         target = jnp.asarray(target)
 
@@ -227,12 +208,6 @@ def train(
         flat_params, tree = jax.tree_flatten(params["encoder"])
         flat_params[0] /= jnp.linalg.norm(flat_params[0], axis=-1, keepdims=True)
         params["encoder"] = jax.tree_unflatten(tree, flat_params)
-
-        # # TEMPORARY: Fix params
-        # flat_params, tree = jax.tree_flatten(params["sym_model"])
-        # flat_params[0] = jnp.array([[0.0, -0.05]])
-        # flat_params[1] = jnp.array([-0.1, 0.0])
-        # params["sym_model"] = jax.tree_unflatten(tree, flat_params)
 
         # Print loss
         if step % 1000 == 0:
@@ -286,8 +261,8 @@ if __name__ == "__main__":
         type=str,
         default="./data/nlse_1d_raw.npz",
         help=(
-            "Path to 1D nonlinear Schrödinger dataset (generated and saved if it does not "
-            "exist). Default: ./data/nlse_1d.npz"
+            "Path to 1D nonlinear Schrödinger dataset (generated and saved "
+            "if it does not exist). Default: ./data/nlse_1d.npz"
         ),
     )
     args = parser.parse_args()
@@ -365,22 +340,6 @@ if __name__ == "__main__":
     params["encoder"] = model_init["encoder"](
         next(key_seq), jnp.ones([1, scaled_data.shape[0], mesh, num_visible])
     )
-    # params["encoder"] = model_init["encoder"](
-    #     next(key_seq), jnp.ones([100 // 100, 100, mesh, num_visible])
-    # )
-    # # Initialize encoder to true solution at time = 0
-    # flat_params, tree = jax.tree_flatten(params["encoder"])
-    # sol = raw_sol[1:-1].reshape(1, -1, 64)
-    # sol = sol / np.abs(sol)
-    # sol = jnp.stack((sol.real, sol.imag), axis=-1)
-    # flat_params[0] = sol[:, :100]  # jnp.repeat(sol[:, [0]], 30, axis=1)
-    # params["encoder"] = jax.tree_unflatten(tree, flat_params)
-
-    # flat_params, tree = jax.tree_flatten(params["encoder"])
-    # theta = jnp.arange(0, 2 * np.pi, step=2 * np.pi / mesh)
-    # flat_params[0] *= np.stack((jnp.cos(theta), jnp.sin(theta)), axis=-1)
-    # params["encoder"] = jax.tree_unflatten(tree, flat_params)
-
     params["sym_model"] = model_init["sym_model"](
         next(key_seq), jnp.ones([1, 1, mesh, num_hidden // 2], dtype=jnp.complex64), 0.0
     )
@@ -404,9 +363,9 @@ if __name__ == "__main__":
         multi_gpu=multi_gpu,
     )
 
-    # # Save model parameters and sparse mask
-    # print(f"Saving best model parameters in output folder: {args.output}")
-    # save_pytree(
-    #     os.path.join(args.output, "best.pt"),
-    #     {"params": best_params, "sparse_mask": sparse_mask},
-    # )
+    # Save model parameters and sparse mask
+    print(f"Saving best model parameters in output folder: {args.output}")
+    save_pytree(
+        os.path.join(args.output, "best.pt"),
+        {"params": best_params, "sparse_mask": sparse_mask},
+    )

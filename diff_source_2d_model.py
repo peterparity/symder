@@ -25,7 +25,7 @@ from utils import loss_fn, init_optimizers, save_pytree  # , load_pytree
 def get_model(num_visible, num_hidden, num_der, mesh, dx, dt, scale, get_dzdt=False):
 
     # Define encoder
-    hidden_size = 64  # 128
+    hidden_size = 64
     pad = 2
 
     def encoder(x):
@@ -41,16 +41,6 @@ def get_model(num_visible, num_hidden, num_der, mesh, dx, dt, scale, get_dzdt=Fa
                 hk.Conv3D(num_hidden, kernel_shape=1),
             ]
         )(x)
-
-    # def encoder(x):
-    #     return hk.Sequential(
-    #         [
-    #             lambda x: jnp.pad(
-    #                 x, ((0, 0), (0, 0), (pad, pad), (pad, pad), (0, 0)), "wrap"
-    #             ),
-    #             hk.Conv3D(num_hidden, kernel_shape=5, padding="VALID"),
-    #         ]
-    #     )(x)
 
     encoder = hk.without_apply_rng(hk.transform(encoder))
     encoder_apply = append_dzdt(encoder.apply) if get_dzdt else encoder.apply
@@ -210,20 +200,6 @@ def train(
             grads, opt_state, params, sparse_mask
         )
 
-        # # TEMPORARY: Fix params
-        # flat_params, tree = jax.tree_flatten(params["sym_model"])
-        # flat_params[0] = jax.device_put_sharded(
-        #     4 * [jnp.array([0.0, 0.0])], jax.devices()
-        # )
-        # flat_params[1] = jax.device_put_sharded(
-        #     4 * [jnp.array([[0.0, 0.0], [0.1, -0.01]])], jax.devices()
-        # )
-        # flat_params[2] = jax.device_put_sharded(
-        #     4 * [jnp.array([[0.0, 0.0, 0.2, 0.2, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0]])],
-        #     jax.devices(),
-        # )
-        # params["sym_model"] = jax.tree_unflatten(tree, flat_params)
-
         # Print loss
         if step % 100 == 0:
             loss, mse, reg_dzdt, reg_l1_sparse = loss_list
@@ -270,8 +246,8 @@ if __name__ == "__main__":
         type=str,
         default="./data/diff_source_2d.npz",
         help=(
-            "Path to 2D diffusion with source dataset (generated and saved if it does not "
-            "exist). Default: ./data/diff_source_2d.npz"
+            "Path to 2D diffusion with source dataset (generated and saved "
+            "if it does not exist). Default: ./data/diff_source_2d.npz"
         ),
     )
     args = parser.parse_args()

@@ -181,8 +181,8 @@ if __name__ == "__main__":
         type=str,
         default="./data/rossler.npz",
         help=(
-            "Path to Rossler system dataset (generated and saved if it does not exist). "
-            "Default: ./data/rossler.npz"
+            "Path to Rossler system dataset (generated and saved "
+            "if it does not exist). Default: ./data/rossler.npz"
         ),
     )
     args = parser.parse_args()
