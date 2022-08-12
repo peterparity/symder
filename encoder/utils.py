@@ -27,7 +27,12 @@ def concat_visible(encoder_apply, visible_transform=None):
     def encoder_concat_visible(params, x, *args, **kwargs):
         z_visible = (visible_transform(x)
                      if visible_transform is not None else x)
-        z_hidden, *out_args = encoder_apply(params, x, *args, **kwargs)
+        out = encoder_apply(params, x, *args, **kwargs)
+        if isinstance(out, list) or isinstance(out, tuple):
+            z_hidden, *out_args = out
+        else:
+            z_hidden = out
+            out_args = ()
         z = jnp.concatenate((z_visible, z_hidden), axis=-1)
         return z, *out_args
     return encoder_concat_visible
@@ -48,6 +53,11 @@ def normalize_by_magnitude(encoder_apply, pad=None, squared=False):
 
 def to_complex(encoder_apply):
     def encoder_complex(params, x, *args, **kwargs):
-        z, *out_args = encoder_apply(params, x, *args, **kwargs)
+        out = encoder_apply(params, x, *args, **kwargs)
+        if isinstance(out, list) or isinstance(out, tuple):
+            z, *out_args = out
+        else:
+            z = out
+            out_args = ()
         return z[..., [0]] + 1j * z[..., [1]], *out_args
     return encoder_complex

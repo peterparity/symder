@@ -104,6 +104,21 @@ def train(
         lambda x: jnp.ones_like(x, dtype=bool), params["sym_model"]
     )
 
+    # # Remove hidden state
+    # flat_mask, tree = jax.tree_flatten(sparse_mask)
+    # flat_mask[0] = jnp.array([True, True, False])
+    # flat_mask[1] = jnp.array(
+    #     [[True, True, False], [True, True, False], [False, False, False]]
+    # )
+    # flat_mask[2] = jnp.array(
+    #     [
+    #         [[True, True, False], [False, True, False], [False, False, False]],
+    #         [[True, True, False], [False, True, False], [False, False, False]],
+    #         [[False, False, False], [False, False, False], [False, False, False]],
+    #     ]
+    # )
+    # sparse_mask = jax.tree_unflatten(tree, flat_mask)
+
     # Initialize optimizers
     update_params, opt_state = init_optimizers(params, optimizers, sparsify)
     update_params = jax.jit(update_params)
@@ -193,6 +208,12 @@ if __name__ == "__main__":
         default=[0, 1],
         help="List of visible variables (0, 1, and/or 2). Default: 0 1",
     )
+    parser.add_argument(
+        "-e",
+        "--extrahidden",
+        type=int,
+        help="Number of extra hidden variables. Default: 0",
+    )
     args = parser.parse_args()
 
     # Seed random number generator
@@ -200,7 +221,7 @@ if __name__ == "__main__":
 
     # Set SymDer parameters
     num_visible = len(args.visible)  # 2
-    num_hidden = 3 - num_visible  # 1
+    num_hidden = 3 - num_visible + args.extrahidden
     num_der = 2
 
     # Set dataset parameters and load/generate dataset

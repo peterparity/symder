@@ -34,6 +34,32 @@ class Quadratic(hk.Module):
         return out
 
 
+class Cubic(hk.Module):
+    def __init__(self, n_dims, init=jnp.zeros):
+        super().__init__()
+        self.n_dims = n_dims
+
+        ind = np.arange(n_dims)
+        mesh = np.stack(np.meshgrid(ind, ind, ind), -1)
+        self.mask = jnp.array(mesh[..., 0] >= mesh[..., 1]) * jnp.array(
+            mesh[..., 1] >= mesh[..., 2]
+        )
+
+        self.init = lambda *args: self.mask * init(*args)
+
+    def __call__(self, z, t=None):
+        weights = self.mask * hk.get_parameter(
+            "w", (self.n_dims, self.n_dims, self.n_dims, self.n_dims), init=self.init
+        )
+        out = (
+            weights
+            * z[..., None, None, None, :]
+            * z[..., None, None, :, None]
+            * z[..., None, :, None, None]
+        ).sum((-3, -2, -1))
+        return out
+
+
 class PointwisePolynomial(hk.Module):
     def __init__(
         self, poly_terms=(2, 4), init=jnp.zeros, name="pointwise_polynomial",

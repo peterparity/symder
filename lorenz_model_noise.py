@@ -12,7 +12,7 @@ from functools import partial
 # from tqdm.auto import tqdm
 
 from data.utils import get_dataset
-from data.lorenz import generate_dataset
+from data.lorenz_noise import generate_dataset
 
 from encoder.utils import append_dzdt, concat_visible
 from symder.sym_models import SymModel, Quadratic, rescale_z
@@ -104,6 +104,21 @@ def train(
         lambda x: jnp.ones_like(x, dtype=bool), params["sym_model"]
     )
 
+    # # TEMPORARY: Init mask
+    # flat_mask, tree = jax.tree_flatten(sparse_mask)
+    # flat_mask[0] = jnp.array([False, False, True])
+    # flat_mask[1] = jnp.array(
+    #     [[True, True, False], [True, True, False], [False, False, True]]
+    # )
+    # flat_mask[2] = jnp.array(
+    #     [
+    #         [[False, False, False], [False, False, False], [False, False, False]],
+    #         [[False, False, True], [False, False, False], [False, False, False]],
+    #         [[False, True, False], [False, False, False], [False, False, False]],
+    #     ]
+    # )
+    # sparse_mask = jax.tree_unflatten(tree, flat_mask)
+
     # Initialize optimizers
     update_params, opt_state = init_optimizers(params, optimizers, sparsify)
     update_params = jax.jit(update_params)
@@ -166,23 +181,23 @@ def train(
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Run SymDer model on Lorenz system data."
+        description="Run SymDer model on Lorenz system data with added noise."
     )
     parser.add_argument(
         "-o",
         "--output",
         type=str,
-        default="./lorenz_run0/",
-        help="Output folder path. Default: ./lorenz_run0/",
+        default="./lorenz_noise_run0/",
+        help="Output folder path. Default: ./lorenz_noise_run0/",
     )
     parser.add_argument(
         "-d",
         "--dataset",
         type=str,
-        default="./data/lorenz.npz",
+        default="./data/lorenz_noise.npz",
         help=(
             "Path to Lorenz system dataset (generated and saved "
-            "if it does not exist). Default: ./data/lorenz.npz"
+            "if it does not exist). Default: ./data/lorenz_noise.npz"
         ),
     )
     parser.add_argument(
@@ -192,6 +207,19 @@ if __name__ == "__main__":
         nargs="+",
         default=[0, 1],
         help="List of visible variables (0, 1, and/or 2). Default: 0 1",
+    )
+    parser.add_argument(
+        "--noise",
+        type=float,
+        default=0.0,
+        help="Gaussian noise standard deviation. Default: 0.0",
+    )
+    parser.add_argument(
+        "--smooth",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Smoothing window size, polynomial order. Default: None",
     )
     args = parser.parse_args()
 
@@ -215,11 +243,13 @@ if __name__ == "__main__":
         num_visible=num_visible,
         visible_vars=args.visible,
         num_der=num_der,
+        noise=args.noise,
+        smoothing_params=args.smooth,
     )
 
     # Set training hyperparameters
     n_steps = 50000
-    sparse_thres = 1e-3  # 5e-3
+    sparse_thres = 1e-3
     sparse_interval = 5000
 
     # Define optimizers

@@ -4,12 +4,21 @@ from scipy.integrate import solve_ivp
 from sklearn.preprocessing import StandardScaler
 
 from .utils import generate_diff_kernels
+from scipy.signal import savgol_filter
 
 __all__ = ["generate_dataset"]
 
 
 def generate_dataset(
-    dt=1e-2, tmax=None, num_visible=2, num_der=2, visible_vars=None, raw_sol=False,
+    dt=1e-2,
+    tmax=None,
+    num_visible=2,
+    num_der=2,
+    visible_vars=None,
+    noise=None,
+    rng=np.random.default_rng(0),
+    smoothing_params=None,
+    raw_sol=False,
 ):
     if tmax is None:
         tmax = 100 + 2 * dt
@@ -41,6 +50,17 @@ def generate_dataset(
         args=(sigma, beta, rho),
     )
     data = sol.y[visible_vars]
+
+    if noise is not None:
+        # Add noise
+        data_no_noise = data.copy()
+        data += rng.normal(scale=noise, size=data.shape)
+
+        if smoothing_params is not None:
+            # Smoothing
+            data = savgol_filter(data, smoothing_params[0], smoothing_params[1])
+        
+        print(np.mean(np.abs(data - data_no_noise)))
 
     # Compute finite difference derivatives
     kernels = generate_diff_kernels(num_der)
